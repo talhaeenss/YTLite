@@ -55,7 +55,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        if: ${{ inputs.enable_localization }}
 
       - name: Install Dependencies
         run: brew install make ldid dpkg
@@ -220,19 +219,22 @@ jobs:
           git checkout
           mv *.appex ..
 
-      - name: Update localization
-        if: ${{ inputs.enable_localization }}
+      - name: Update localization and patch YouTube Plus
         run: |
-          mkdir debdir
+          mkdir -p debdir
           dpkg-deb -R ytplus.deb debdir
           rm ytplus.deb
-          find "layout/Library/Application Support/YTLite.bundle" \
-            -mindepth 1 -maxdepth 1 -type d -name "*.lproj" -not -name "en.lproj" \
-            -exec cp -R "{}" "debdir/Library/Application Support/YTLite.bundle/" \;
+          if [ "${{ inputs.enable_localization }}" = "true" ]; then
+            find "layout/Library/Application Support/YTLite.bundle" \
+              -mindepth 1 -maxdepth 1 -type d -name "*.lproj" -not -name "en.lproj" \
+              -exec cp -R "{}" "debdir/Library/Application Support/YTLite.bundle/" \;
+          fi
+          find debdir -name "YTLite.dylib" -exec python3 patch_ytlite.py {} \;
           cd debdir/
           find . -type f -not -path "./DEBIAN/*" -exec md5sum {} + | sort -k 2 | sed 's/\.\/\(.*\)/\1/' > DEBIAN/md5sums
           cd ../
           dpkg-deb --root-owner-group -b debdir ytplus.deb
+          rm -rf debdir
 
       - name: Upload built debs as artifacts
         uses: actions/upload-artifact@v7
